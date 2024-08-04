@@ -26,6 +26,7 @@ import (
 	"k8s.io/kops/upup/pkg/fi"
 	"k8s.io/kops/upup/pkg/fi/cloudup/awsup"
 	"k8s.io/kops/upup/pkg/fi/cloudup/terraform"
+	"k8s.io/kops/util/pkg/reflectutils"
 )
 
 type renderTest struct {
@@ -59,14 +60,14 @@ func doRenderTests(t *testing.T, method string, cases []*renderTest) {
 
 		err := func() error {
 			// @step: invoke the rendering method of the target
-			resp := reflect.ValueOf(c.Resource).MethodByName(method).Call(inputs)
+			resp := reflectutils.GetMethodByName(reflect.ValueOf(c.Resource), method).Call(inputs)
 			if err := resp[0].Interface(); err != nil {
 				return err.(error)
 			}
 
 			// @step: invoke the target finish up
 			in := []reflect.Value{reflect.ValueOf(make(map[string]fi.CloudupTask))}
-			resp = reflect.ValueOf(target).MethodByName("Finish").Call(in)
+			resp = reflectutils.GetMethodByName(reflect.ValueOf(target), "Finish").Call(in)
 			if err := resp[0].Interface(); err != nil {
 				return err.(error)
 			}
