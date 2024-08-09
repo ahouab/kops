@@ -22,7 +22,7 @@ import (
 )
 
 // NvidiaDefaultDriverPackage is the nvidia driver default version
-const NvidiaDefaultDriverPackage = "nvidia-driver-535"
+const NvidiaDefaultDriverPackage = "nvidia-driver-535-server"
 
 // ContainerdConfig is the configuration for containerd
 type ContainerdConfig struct {
