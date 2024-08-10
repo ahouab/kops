@@ -57,14 +57,50 @@ func JSONMergeStruct(dest, src interface{}) {
 	}
 }
 
+// GetMethodByName implements a switch statement so that we can help the compiler with dead-code-elimination.
+// For background: https://github.com/golang/protobuf/issues/1561
+func GetMethodByName(reflectValue reflect.Value, methodName string) reflect.Value {
+	switch methodName {
+	case "CheckChanges":
+		return reflectValue.MethodByName("CheckChanges")
+	case "Find":
+		return reflectValue.MethodByName("Find")
+	case "ShouldCreate":
+		return reflectValue.MethodByName("ShouldCreate")
+	case "Finish":
+		return reflectValue.MethodByName("Finish")
+	case "Render":
+		return reflectValue.MethodByName("Render")
+	case "RenderAWS":
+		return reflectValue.MethodByName("RenderAWS")
+	case "RenderAzure":
+		return reflectValue.MethodByName("RenderAzure")
+	case "RenderDO":
+		return reflectValue.MethodByName("RenderDO")
+	case "RenderGCE":
+		return reflectValue.MethodByName("RenderGCE")
+	case "RenderHetzner":
+		return reflectValue.MethodByName("RenderHetzner")
+	case "RenderOpenstack":
+		return reflectValue.MethodByName("RenderOpenstack")
+	case "RenderScw":
+		return reflectValue.MethodByName("RenderScw")
+	case "RenderTerraform":
+		return reflectValue.MethodByName("RenderTerraform")
+
+	default:
+		panic(fmt.Sprintf("need to add %q to getMethodByName helper", methodName))
+	}
+}
+
 // InvokeMethod calls the specified method by reflection
-func InvokeMethod(target interface{}, name string, args ...interface{}) ([]reflect.Value, error) {
+func InvokeMethod(target interface{}, methodName string, args ...interface{}) ([]reflect.Value, error) {
 	v := reflect.ValueOf(target)
 
-	method, found := v.Type().MethodByName(name)
-	if !found {
+	m := GetMethodByName(v, methodName)
+	if !m.IsValid() {
 		return nil, &MethodNotFoundError{
-			Name:   name,
+			Name:   methodName,
 			Target: target,
 		}
 	}
@@ -73,8 +109,7 @@ func InvokeMethod(target interface{}, name string, args ...interface{}) ([]refle
 	for _, a := range args {
 		argValues = append(argValues, reflect.ValueOf(a))
 	}
-	klog.V(12).Infof("Calling method %s on %T", method.Name, target)
-	m := v.MethodByName(method.Name)
+	klog.V(12).Infof("Calling method %s on %T", methodName, target)
 	rv := m.Call(argValues)
 	return rv, nil
 }

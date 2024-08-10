@@ -27,6 +27,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/kops/pkg/apis/kops"
 	"k8s.io/kops/pkg/apis/nodeup"
+	"k8s.io/kops/util/pkg/reflectutils"
 	"k8s.io/kops/util/pkg/vfs"
 )
 
@@ -196,19 +197,44 @@ func (c *Context[T]) Render(a, e, changes Task[T]) error {
 
 	targetType := reflect.ValueOf(c.Target).Type()
 
-	var renderer *reflect.Method
+	var renderer *reflect.Value
 	var rendererArgs []reflect.Value
+	rendererName := ""
 
-	for i := 0; i < vType.NumMethod(); i++ {
-		method := vType.Method(i)
-		if !strings.HasPrefix(method.Name, "Render") {
+	renderMethodNames := []string{"Render"}
+
+	targetTypeName := fmt.Sprintf("%T", c.Target)
+	switch targetTypeName {
+	case "*awsup.AWSAPITarget":
+		renderMethodNames = append(renderMethodNames, "RenderAWS")
+	case "*azure.AzureAPITarget":
+		renderMethodNames = append(renderMethodNames, "RenderAzure")
+	case "*do.DOAPITarget":
+		renderMethodNames = append(renderMethodNames, "RenderDO")
+	case "*gce.GCEAPITarget":
+		renderMethodNames = append(renderMethodNames, "RenderGCE")
+	case "*hetzner.HetznerAPITarget":
+		renderMethodNames = append(renderMethodNames, "RenderHetzner")
+	case "*openstack.OpenstackAPITarget":
+		renderMethodNames = append(renderMethodNames, "RenderOpenstack")
+	case "*scaleway.ScwAPITarget":
+		renderMethodNames = append(renderMethodNames, "RenderScw")
+	case "*terraform.TerraformTarget":
+		renderMethodNames = append(renderMethodNames, "RenderTerraform")
+	default:
+		panic(fmt.Sprintf("targetType %q is not recognized", targetTypeName))
+	}
+	for _, methodName := range renderMethodNames {
+		method := reflectutils.GetMethodByName(v, methodName)
+		if !method.IsValid() {
 			continue
 		}
 		match := true
 
+		methodType := method.Type()
 		var args []reflect.Value
-		for j := 0; j < method.Type.NumIn(); j++ {
-			arg := method.Type.In(j)
+		for j := 0; j < methodType.NumIn(); j++ {
+			arg := methodType.In(j)
 			if arg.ConvertibleTo(vType) {
 				continue
 			}
@@ -225,27 +251,29 @@ func (c *Context[T]) Render(a, e, changes Task[T]) error {
 		}
 		if match {
 			if renderer != nil {
-				if method.Name == "Render" {
+				if methodName == "Render" {
 					continue
 				}
-				if renderer.Name != "Render" {
-					return fmt.Errorf("found multiple Render methods that could be involved on %T", e)
+				if rendererName != "Render" {
+					return fmt.Errorf("found multiple Render methods that could be invoked on %T", e)
 				}
 			}
 			renderer = &method
+			rendererName = methodName
 			rendererArgs = args
 		}
-
 	}
+
 	if renderer == nil {
 		return fmt.Errorf("could not find Render method on type %T (target %T)", e, c.Target)
 	}
+
 	rendererArgs = append(rendererArgs, reflect.ValueOf(a))
 	rendererArgs = append(rendererArgs, reflect.ValueOf(e))
 	rendererArgs = append(rendererArgs, reflect.ValueOf(changes))
-	klog.V(11).Infof("Calling method %s on %T", renderer.Name, e)
-	m := v.MethodByName(renderer.Name)
-	rv := m.Call(rendererArgs)
+	klog.V(11).Infof("Calling method %s on %T", rendererName, e)
+	// m := v.MethodByName(renderer.Name)
+	rv := (*renderer).Call(rendererArgs)
 	var rvErr error
 	if !rv[0].IsNil() {
 		rvErr = rv[0].Interface().(error)
